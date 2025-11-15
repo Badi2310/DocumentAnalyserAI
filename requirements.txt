@@ -1,0 +1,10 @@
+!pip install python-dotenv==1.0.1
+!pip install mistralai
+!pip install langchain sentence_transformers langchain_huggingface langchain_community unstructured nltk==3.9.1
+!pip install jq pypdf langchain_chroma rank_bm25 arxiv langchain-mistralai scikit-learn
+!pip install -U weaviate-client
+!pip install 'weaviate-client>=3.26.7,<4.0.0'
+!apt install -y tesseract-ocr
+!apt install -y libtesseract-dev
+!apt install -y tesseract-ocr-all
+!pip install pytesseract
