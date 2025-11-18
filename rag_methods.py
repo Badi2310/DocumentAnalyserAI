@@ -116,7 +116,7 @@ def stream_llm_response(llm_stream, messages):
 api_key = os.getenv("MISTRAL_API_KEY")
 model = ChatMistralAI(
     api_key=api_key,
-    model="mistral-large-latest",
+    model="mistral-small-latest",
     temperature=0.7,
     max_tokens=512
 )

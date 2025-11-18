@@ -143,7 +143,6 @@ class PDFProcessor:
         except Exception as e:
             print(f"Error processing PDF: {e}")
             raise
-
         return processed_pages
 
     def cleanup(self):
@@ -158,7 +157,7 @@ class PDFProcessor:
 
 # Example of usage
 
-# path = "1.pdf"
+# path = "/home/kirill/20251116_213510.pdf"
 # loader = PDFProcessor()
 # try:
 #     data = loader.process(file_path=path)

@@ -15,11 +15,12 @@ from imp1 import (
     load_pdf_to_db,
     stream_llm_response,
     stream_llm_rag_response,
+    clear_weaviate_data
 )
 
 dotenv.load_dotenv()
 
-MODELS = ["mistral-large-latest"]
+MODELS = ["mistral-small-latest"]
 
 # Настройка страницы Streamlit
 st.set_page_config(
@@ -48,7 +49,18 @@ if "messages" not in st.session_state:
 def clear_chat():
     st.session_state.messages = [{"role": "assistant", "content": "Привет! Чем могу помочь?"}]
 
-st.button("Очистить чат", on_click=clear_chat, type="primary")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.button("Очистить чат", on_click=clear_chat, type="primary")
+
+with col2:
+    if st.button("🗑️ Очистить БД", type="secondary"):
+        clear_weaviate_data()
+        st.session_state.vector_db = None
+        st.session_state.rag_sources = []
+        st.rerun()
 
 # Обработчик загрузки файлов
 uploaded_files = st.file_uploader(
@@ -72,7 +84,7 @@ for message in st.session_state.messages:
 
 # Инициализация модели для потокового вывода
 llm_stream = ChatMistralAI(
-    model_name="mistral-large-latest",
+    model_name="mistral-small-latest",
     temperature=0.3,
     streaming=True
 )
@@ -117,6 +129,4 @@ if prompt := st.chat_input("Ваше сообщение"):
             # Обновляем placeholder с накопленным текстом (плавный вывод)
             placeholder.markdown(full_response, unsafe_allow_html=True)
 
-        # Добавляем финальный ответ в историю сообщений
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
 
