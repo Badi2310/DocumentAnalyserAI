@@ -23,7 +23,7 @@ with col1:
     st.button("Очистить чат", on_click=clear_chat, type="primary")
 
 with col2:
-    if st.button("🗑️ Очистить БД", type="secondary"):
+    if st.button("Очистить БД", type="secondary"):
         clear_weaviate_data()
         st.session_state.vector_db = None
         st.session_state.rag_sources = []

@@ -90,7 +90,7 @@ try:
 except ImportError:
     print("langchain-community не установлен")
 
-from langchain_core.messages import AIMessageChunk  # Для типизации, если нужно
+from langchain_core.messages import AIMessageChunk  
 
 import utils.database
 from models.llm import init_llm
@@ -108,33 +108,29 @@ output_parser = StrOutputParser()
 def stream_llm_response(llm, messages):
     response_message = ""
     for chunk in llm.stream(messages):
-        if isinstance(chunk, AIMessageChunk) and chunk.content:  # Проверяем, что это текст
+        if isinstance(chunk, AIMessageChunk) and chunk.content:  
             response_message += chunk.content
-            yield chunk.content  # Yield только текст, без метаданных
+            yield chunk.content  
         else:
-            # Если чанк не текст (редко), пропускаем
             continue
 
-    # Добавляем полный ответ в историю
     st.session_state.messages.append({"role": "assistant", "content": response_message})
 
     conversation_rag_chain = get_conversational_rag_chain(model)
     response_message = "*(RAG Response)*"
 
-    # Stream цепочки: используем .stream с input
     for chunk in conversation_rag_chain.pick("answer").stream(
         {"messages": messages[:-1], "input": messages[-1].content}
     ):
-        if hasattr(chunk, 'content') and chunk.content and chunk.content.strip():  # Для совместимости
+        if hasattr(chunk, 'content') and chunk.content and chunk.content.strip():  
             text = chunk.content.replace('\n', ' ')
             response_message += text
-            yield text  # Только текст
+            yield text 
         else:
             text = str(chunk).replace('\n', ' ')
-            response_message += text  # Fallback для не-AIMessage
+            response_message += text  
             yield text
 
-    # Добавляем полный в историю
     st.session_state.messages.append({"role": "assistant", "content": response_message})
 
 
@@ -144,7 +140,14 @@ def _get_context_retriever_chain(vector_db, model):
         st.session_state.vector_db = utils.database.initialize_vector_db([])
         vector_db = st.session_state.vector_db
 
-    retriever = vector_db.as_retriever()
+    retriever = vector_db.as_retriever(
+        search_type="mmr",  
+        search_kwargs={
+            "k": 15,  
+            "fetch_k": 30,  
+            "lambda_mult": 0.7  
+        }
+    )
     prompt = ChatPromptTemplate.from_messages([
         MessagesPlaceholder(variable_name="chat_history"),
         ("user", "{input}"),
@@ -159,19 +162,33 @@ def _get_context_retriever_chain(vector_db, model):
 def get_conversational_rag_chain(model):
     retriever_chain = _get_context_retriever_chain(st.session_state.vector_db, model)
 
-    # Преобразуем список загруженных файлов в строку с перечислением имён файлов
     if st.session_state.rag_sources:
-        loaded_docs_list = ", ".join(file.name if hasattr(file, "name") else str(file) for file in st.session_state.rag_sources)
+        unique_sources = list(set(
+            item.name if hasattr(item, 'name') else str(item) 
+            for item in st.session_state.rag_sources
+        ))
+        loaded_docs_list = ", ".join(unique_sources)
     else:
         loaded_docs_list = "Нет загруженных документов"
 
     prompt = ChatPromptTemplate.from_messages([
         ("system",
-        f"""You are a helpful assistant. You will have to answer to user's queries.
-        You will have some context to help with your answers, but not always would be completely related or helpful.
-        You can also use your knowledge to assist answering the user's queries.\n
-        Loaded documents: {loaded_docs_list}. If the user refers to "this document" or similar, assume they mean the most recently loaded or relevant one based on context.
-        {{context}}"""),
+        f"""You are a helpful AI assistant. Answer user questions based on the provided context.
+
+        CONTEXT FROM DOCUMENTS:
+        {{context}}
+
+        LOADED DOCUMENTS: {loaded_docs_list}
+
+        INSTRUCTIONS:
+        - The context above contains the actual content from the loaded PDF documents
+        - When asked "what's inside the file" or similar questions, the context IS the file content
+        - Answer directly based on what you see in the context
+        - If asked about file contents, summarize or quote the context directly
+        - The context shows exactly what is written in the documents
+        - If the context is empty or doesn't contain relevant info, say so clearly
+        - If you see [Image: ...] that's a describe of image in text. Use it in answer if you need.
+        - Don't write about your components in answer like RAG or something"""),
         MessagesPlaceholder(variable_name="messages"),
         ("user", "{input}"),
     ])
@@ -182,20 +199,16 @@ def get_conversational_rag_chain(model):
 
 
 def stream_llm_rag_response(messages):
-    # Инициализация модели (из первой функции)
-    time.sleep(10)  # Если нужно, но можно убрать для реального использования
+    time.sleep(2)  
 
-    #Почему мы создаём каждый раз новую модель?
-    model = init_llm(temperature=0.7, max_tokens=512)
+    model = init_llm(temperature=0.7, max_tokens=16248)
 
-    # Создание RAG-цепочки и стриминг (из второй функции)
-    conversation_rag_chain = get_conversational_rag_chain(model)  # Передаём созданную модель
+    conversation_rag_chain = get_conversational_rag_chain(model)  
     response_message = "*(RAG Response)*\n"
     for chunk in conversation_rag_chain.pick("answer").stream({"messages": messages[:-1], "input": messages[-1].content}):
         response_message += chunk
         yield chunk
 
-    # Добавление в сессию (из второй функции)
     st.session_state.messages.append({"role": "assistant", "content": response_message})
 
 

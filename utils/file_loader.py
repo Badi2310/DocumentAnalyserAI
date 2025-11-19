@@ -7,9 +7,8 @@ from docx import Document
 from fpdf import FPDF
 
 from langchain_core.documents import Document as langDocument
+from utils.database import initialize_vector_db
 
-
-#-------------------------------------------------------------------
 
 DB_DOCS_LIMIT = 10
 
@@ -42,34 +41,34 @@ def load_pdf_to_db(pdf_file):
                     )
                     docs.append(doc)
 
+                st.session_state.rag_sources.append(pdf_file.name)
+
                 _split_and_load_docs(docs)
 
+                st.toast(f"{pdf_file.name} успешно загружен")
 
             except Exception as e:
-                st.toast(f"Ошибка загрузки PDF {pdf_file.name}: {e}", icon="⚠️")
+                st.toast(f"Ошибка загрузки PDF {pdf_file.name}: {e}")
                 print(f"Ошибка загрузки PDF {pdf_file.name}: {e}")
         else:
             st.error(f"Достигнут лимит документов ({DB_DOCS_LIMIT}).")
 
 
-# Разделение текста на чанки (chunks)
+# 
 def _split_and_load_docs(pages):
-    # Создание экземпляра разделителя текста
+    '''Разделение текста на чанки (chunks)'''
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,  # Размер каждого чанка в символах
-        chunk_overlap=20   # Перекрытие между чанками в символах
+        chunk_size=1500, 
+        chunk_overlap=150  
     )
-    # Применение разделителя к документам (pages)
     docs = text_splitter.split_documents(pages)
 
     if "vector_db" not in st.session_state or st.session_state.vector_db is None:
-        #Почему не разделённые?
-        st.session_state.vector_db = utils.database.initialize_vector_db(pages)
+        st.session_state.vector_db = initialize_vector_db(pages)
     else:
         st.session_state.vector_db.add_documents(docs)
 
 
-#---------------------------------------------------
 
 def handle_uploaded_files(files, session_rag_sources):
     session_rag_sources.extend(files)
@@ -78,22 +77,92 @@ def handle_uploaded_files(files, session_rag_sources):
             load_pdf_to_db(file)
     return len(files)
 
-#---------------------------------------------------
+
 
 
 class PDFProcessor:
     def __init__(self, ocr_model=None, captioner_model=None, min_text_length=20):
-        from models.OCR import OCR, ImageCaptioner
+        from models import OCR, ImageCaptioner
 
         self.ocr = ocr_model or OCR()
         self.captioner = captioner_model or ImageCaptioner()
         self.temp_dir = tempfile.mkdtemp()
         self.min_text_length = min_text_length
 
+    def is_text_file(self, file_path):
+        """Check type file"""
+        text_extensions = {'.txt', '.md', '.csv', '.log', '.text'}
+        _, ext = os.path.splitext(file_path.lower())
+        return ext in text_extensions
+
+    def read_text_file(self, file_path):
+        """Read text with differenf encodings"""
+        try:
+            encodings = ['utf-8', 'utf-8-sig', 'cp1251', 'windows-1251', 'latin-1', 'iso-8859-1']
+            
+            for encoding in encodings:
+                try:
+                    with open(file_path, 'r', encoding=encoding) as f:
+                        text = f.read()
+                    return text
+                except (UnicodeDecodeError, LookupError):
+                    continue
+            
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                text = f.read()
+            return text
+            
+        except Exception as e:
+            print(f"Ошибка чтения TXT файла: {e}")
+            return ""
+
+    def process_text_file(self, file_path):
+        """Обработка TXT файла"""
+        text = self.read_text_file(file_path)
+        
+        if not text:
+            print("TXT файл пустой или не удалось прочитать")
+            return []
+        
+        chunk_size = 2000
+        pages = []
+        
+        if len(text) <= chunk_size:
+            pages.append(text)
+            print(f"  TXT файл обработан: 1 страница ({len(text)} символов)")
+        else:
+            lines = text.split('\n')
+            current_chunk = []
+            current_length = 0
+            
+            for line in lines:
+                line_length = len(line) + 1  
+                
+                if current_length + line_length > chunk_size and current_chunk:
+                    pages.append('\n'.join(current_chunk))
+                    current_chunk = [line]
+                    current_length = line_length
+                else:
+                    current_chunk.append(line)
+                    current_length += line_length
+            
+            if current_chunk:
+                pages.append('\n'.join(current_chunk))
+            
+            print(f"  TXT файл обработан: {len(pages)} страниц")
+        
+        return pages
+
     def convert_to_pdf(self, file_path):
+        """Конвертация файлов в PDF """
         ext = os.path.splitext(file_path)[1].lower()
+        
         if ext == ".pdf":
             return file_path
+        
+        elif ext in ['.txt', '.md', '.csv', '.log']:
+            return None
+        
         elif ext == ".docx":
             pdf_path = file_path.replace(".docx", ".pdf")
             doc = Document(file_path)
@@ -107,6 +176,7 @@ class PDFProcessor:
                 pdf.cell(0, 10, text=line, new_x="LMARGIN", new_y="NEXT")
             pdf.output(pdf_path)
             return pdf_path
+        
         else:
             raise ValueError(f"Unsupported file type: {ext}")
 
@@ -156,10 +226,18 @@ class PDFProcessor:
         )
 
     def process(self, file_path):
-        """ "
-        Full processing of file
         """
+        Full processing of file (PDF, DOCX, TXT)
+        """
+        if self.is_text_file(file_path):
+            print(f"Обнаружен текстовый файл: {os.path.basename(file_path)}")
+            return self.process_text_file(file_path)
+        
         pdf_path = self.convert_to_pdf(file_path)
+        
+        if pdf_path is None:
+            return self.process_text_file(file_path)
+        
         processed_pages = []
 
         try:
@@ -218,10 +296,11 @@ class PDFProcessor:
         except Exception as e:
             print(f"Error processing PDF: {e}")
             raise
-
+        
         return processed_pages
 
     def cleanup(self):
+        """Очистка временных файлов"""
         try:
             for file in os.listdir(self.temp_dir):
                 os.remove(os.path.join(self.temp_dir, file))
@@ -231,15 +310,3 @@ class PDFProcessor:
             print(f"Cleanup error: {e}")
 
 
-# Example of usage
-
-# path = "1.pdf"
-# loader = PDFProcessor()
-# try:
-#     data = loader.process(file_path=path)
-#     text = "\n".join(data)
-#     with open("result.txt", "w", encoding="utf-8") as f:
-#         f.write(text)
-#     print(f"\nProcessed {len(data)} pages")
-# finally:
-#     loader.cleanup()
