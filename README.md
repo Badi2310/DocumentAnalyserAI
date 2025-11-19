@@ -1,5 +1,8 @@
 # DocumentAnalyserAI
 
+Установка зависимотстей с помощью `install_req.sh`.
+Запуск `python -m streamlit run app/app.py`.
+
 Выбор проекта
 
 Дедлайн - 23:59 8 октября
