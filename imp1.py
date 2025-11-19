@@ -3,7 +3,6 @@ import streamlit as st
 import os
 from dotenv import load_dotenv
 
-# Импорты с проверкой
 try:
     import weaviate
     print("weaviate: установлен и импортирован успешно")
@@ -102,7 +101,6 @@ try:
 except ImportError:
     print("langchain-community не установлен")
 
-# Импорты для метрик
 try:
     from sentence_transformers import SentenceTransformer, util
     print("sentence-transformers: импортирован успешно для метрик")
@@ -120,23 +118,20 @@ dotenv.load_dotenv()
 print("weaviate version:", weaviate.__version__)
 print("langchain version:", langchain.__version__)
 
-# Константы
 DB_DOCS_LIMIT = 10
 
-# Инициализация модели
 api_key = os.getenv("MISTRAL_API_KEY")
 model = ChatMistralAI(
     api_key=api_key,
     model="mistral-large-latest",
     temperature=0.7,
-    max_tokens=1024  # Увеличил для более полных ответов
+    max_tokens=1024  
 )
 output_parser = StrOutputParser()
 
-# Инициализация модели для метрик
 if METRICS_AVAILABLE:
     metrics_model = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
-    print("✅ Модель для метрик загружена")
+    print("Модель для метрик загружена")
 
 
 def calculate_answer_relevance(question, answer, context):
@@ -145,18 +140,16 @@ def calculate_answer_relevance(question, answer, context):
         return None
     
     try:
-        # Эмбеддинги
         question_emb = metrics_model.encode(question, convert_to_tensor=True)
         answer_emb = metrics_model.encode(answer, convert_to_tensor=True)
         context_emb = metrics_model.encode(context, convert_to_tensor=True)
         
-        # Косинусное сходство
         q_a_similarity = util.pytorch_cos_sim(question_emb, answer_emb).item()
         a_c_similarity = util.pytorch_cos_sim(answer_emb, context_emb).item()
         
-        print(f"\n📊 МЕТРИКИ РЕЛЕВАНТНОСТИ:")
-        print(f"  Вопрос ↔ Ответ: {q_a_similarity:.4f}")
-        print(f"  Ответ ↔ Контекст: {a_c_similarity:.4f}")
+        print(f"\nМЕТРИКИ РЕЛЕВАНТНОСТИ:")
+        print(f"  Вопрос <-> Ответ: {q_a_similarity:.4f}")
+        print(f"  Ответ <-> Контекст: {a_c_similarity:.4f}")
         print(f"  Средняя релевантность: {(q_a_similarity + a_c_similarity) / 2:.4f}")
         
         return {
@@ -165,7 +158,7 @@ def calculate_answer_relevance(question, answer, context):
             "average_relevance": (q_a_similarity + a_c_similarity) / 2
         }
     except Exception as e:
-        print(f"❌ Ошибка вычисления метрик: {e}")
+        print(f"Ошибка вычисления метрик: {e}")
         return None
 
 
@@ -185,7 +178,7 @@ def calculate_context_precision(retrieved_docs, user_query):
         
         avg_score = sum(scores) / len(scores) if scores else 0
         
-        print(f"\n📊 МЕТРИКИ КОНТЕКСТА:")
+        print(f"\nМЕТРИКИ КОНТЕКСТА:")
         print(f"  Извлечено документов: {len(retrieved_docs)}")
         print(f"  Средняя релевантность контекста: {avg_score:.4f}")
         print(f"  Релевантность по документам: {[f'{s:.3f}' for s in scores]}")
@@ -196,7 +189,7 @@ def calculate_context_precision(retrieved_docs, user_query):
             "individual_scores": scores
         }
     except Exception as e:
-        print(f"❌ Ошибка вычисления precision: {e}")
+        print(f"Ошибка вычисления precision: {e}")
         return None
 
 
@@ -205,9 +198,8 @@ def load_pdf_to_db(pdf_file):
     docs = []
     os.makedirs("docs", exist_ok=True)
 
-    # ИСПРАВЛЕНО: Проверяем количество уникальных имен файлов
     unique_sources = list(set(st.session_state.rag_sources))
-    print(f"📚 Текущее количество уникальных документов: {len(unique_sources)}/{DB_DOCS_LIMIT}")
+    print(f"Текущее количество уникальных документов: {len(unique_sources)}/{DB_DOCS_LIMIT}")
 
     if pdf_file.name not in st.session_state.rag_sources:
         if len(unique_sources) < DB_DOCS_LIMIT:
@@ -228,23 +220,21 @@ def load_pdf_to_db(pdf_file):
                 
                 print(f"Извлечено {len(docs)} страниц из {pdf_file.name}")
 
-                # Добавляем имя файла в список загруженных
                 st.session_state.rag_sources.append(pdf_file.name)
                 
-                # Разбиваем на чанки и загружаем в БД
                 _split_and_load_docs(docs)
                 
-                st.toast(f"✅ {pdf_file.name} успешно загружен", icon="✅")
+                st.toast(f"{pdf_file.name} успешно загружен")
 
             except Exception as e:
-                st.toast(f"Ошибка загрузки PDF {pdf_file.name}: {e}", icon="⚠️")
+                st.toast(f"Ошибка загрузки PDF {pdf_file.name}: {e}")
                 print(f"Ошибка загрузки PDF {pdf_file.name}: {e}")
         else:
             st.error(f"Достигнут лимит уникальных документов ({DB_DOCS_LIMIT}).")
             print(f"❌ Лимит документов достигнут: {len(unique_sources)}/{DB_DOCS_LIMIT}")
     else:
         st.warning(f"Документ {pdf_file.name} уже загружен.")
-        print(f"⚠️ Документ {pdf_file.name} уже в базе")
+        print(f"Документ {pdf_file.name} уже в базе")
 
 
 def initialize_vector_db(docs):
@@ -257,7 +247,6 @@ def initialize_vector_db(docs):
     
     WEAVIATE_URL = "https://" + WEAVIATE_CLUSTER
     
-    # Инициализация клиента для Weaviate 3.x
     client = weaviate.Client(
         url=WEAVIATE_URL,
         auth_client_secret=weaviate.AuthApiKey(WEAVIATE_API_KEY)
@@ -269,7 +258,7 @@ def initialize_vector_db(docs):
     vector_db = Weaviate.from_documents(
         docs, embeddings, client=client, by_text=False
     )
-    print(f"✅ Документы успешно загружены в vector_db ({len(docs)} чанков)")
+    print(f"Документы успешно загружены в vector_db ({len(docs)} чанков)")
     return vector_db
 
 
@@ -301,7 +290,6 @@ def stream_llm_response(llm, messages):
         else:
             continue
     
-    # Добавляем полный ответ в историю
     st.session_state.messages.append({"role": "assistant", "content": response_message})
 
 
@@ -365,7 +353,8 @@ def get_conversational_rag_chain(model):
     - If asked about file contents, summarize or quote the context directly
     - The context shows exactly what is written in the documents
     - If the context is empty or doesn't contain relevant info, say so clearly
-    - If you see [Image: ...] that's a describe of image in text. Use it in answer if you need."""),
+    - If you see [Image: ...] that's a describe of image in text. Use it in answer if you need.
+    - Don't write about your components in answer like RAG or something"""),
         MessagesPlaceholder(variable_name="messages"),
         ("user", "{input}"),
     ])
@@ -391,8 +380,8 @@ def stream_llm_rag_response(messages):
     print(f"{'='*60}")
     
     if st.session_state.vector_db is None:
-        print("❌ ОШИБКА: vector_db не инициализирована!")
-        error_msg = "⚠️ База данных не инициализирована. Загрузите документ."
+        print("ОШИБКА: vector_db не инициализирована!")
+        error_msg = "База данных не инициализирована. Загрузите документ."
         st.session_state.messages.append({"role": "assistant", "content": error_msg})
         yield error_msg
         return
@@ -402,7 +391,7 @@ def stream_llm_rag_response(messages):
     try:
         retriever = st.session_state.vector_db.as_retriever(search_kwargs={"k": 5})
         retrieved_docs = retriever.get_relevant_documents(user_query)
-        print(f"\n📚 RETRIEVED: {len(retrieved_docs)} документов")
+        print(f"\nRETRIEVED: {len(retrieved_docs)} документов")
         
         for i, doc in enumerate(retrieved_docs):
             print(f"\nДокумент {i+1}:")
@@ -410,18 +399,15 @@ def stream_llm_rag_response(messages):
             print(f"  Страница: {doc.metadata.get('page')}")
             print(f"  Текст: {doc.page_content[:200]}...")
         
-        # Полный контекст
         full_context = "\n\n".join([doc.page_content for doc in retrieved_docs])
-        print(f"\n📄 ПОЛНЫЙ КОНТЕКСТ ({len(full_context)} символов):")
+        print(f"\nПОЛНЫЙ КОНТЕКСТ ({len(full_context)} символов):")
         print(full_context[:500] + "...\n")
         
-        # МЕТРИКИ КОНТЕКСТА
         calculate_context_precision(retrieved_docs, user_query)
         
     except Exception as e:
-        print(f"❌ Ошибка при retrieval: {e}")
+        print(f"Ошибка при retrieval: {e}")
     
-    # Создание RAG-цепочки и стриминг
     conversation_rag_chain = get_conversational_rag_chain(model)
     response_message = "*(RAG Response)*\n"
     
@@ -432,15 +418,13 @@ def stream_llm_rag_response(messages):
         response_message += chunk
         yield chunk
     
-    # МЕТРИКИ ОТВЕТА
     if full_context and len(response_message) > 20:
         calculate_answer_relevance(user_query, response_message, full_context)
     
-    # Добавление в сессию
     st.session_state.messages.append({"role": "assistant", "content": response_message})
     
     print(f"\n{'='*60}")
-    print("✅ ОТВЕТ ЗАВЕРШЕН")
+    print("ОТВЕТ ЗАВЕРШЕН")
     print(f"  Длина ответа: {len(response_message)} символов")
     print(f"{'='*60}\n")
 
@@ -452,8 +436,8 @@ def clear_weaviate_data():
         WEAVIATE_API_KEY = os.getenv("WEAVIATE_API_KEY")
         
         if not WEAVIATE_CLUSTER or not WEAVIATE_API_KEY:
-            print("❌ Отсутствуют переменные окружения для Weaviate")
-            st.toast("❌ Отсутствуют настройки подключения к БД", icon="⚠️")
+            print("Отсутствуют переменные окружения для Weaviate")
+            st.toast("Отсутствуют настройки подключения к БД")
             return
         
         WEAVIATE_URL = "https://" + WEAVIATE_CLUSTER
@@ -470,12 +454,12 @@ def clear_weaviate_data():
                 class_name = class_obj['class']
                 print(f"Удаление класса: {class_name}")
                 client.schema.delete_class(class_name)
-            print("✅ Weaviate БД полностью очищена")
-            st.toast("✅ База данных очищена", icon="✅")
+            print("Weaviate БД полностью очищена")
+            st.toast("База данных очищена")
         else:
             print("ℹ️ БД уже пуста")
-            st.toast("ℹ️ База данных уже пуста", icon="ℹ️")
+            st.toast("ℹ️ База данных уже пуста")
         
     except Exception as e:
-        print(f"❌ Ошибка очистки Weaviate: {e}")
-        st.toast(f"❌ Ошибка очистки БД: {e}", icon="⚠️")
+        print(f"Ошибка очистки Weaviate: {e}")
+        st.toast(f"Ошибка очистки БД: {e}")
