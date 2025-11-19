@@ -202,15 +202,52 @@ def get_conversational_rag_chain(model):
 
 
 def stream_llm_rag_response(messages):
-    model = init_llm(temperature=0.7, max_tokens=16248)
+    """RAG стриминг с обработкой ошибок"""
+    import time
+    from httpx import HTTPStatusError
+    
+    max_retries = 20
+    retry_delay = 2  
+    
+    for attempt in range(max_retries):
+        try:
+            model = init_llm(temperature=0.7, max_tokens=16248)
+            conversation_rag_chain = get_conversational_rag_chain(model)
+            
+            response_message = ""
+            for chunk in conversation_rag_chain.pick("answer").stream({
+                "messages": messages[:-1], 
+                "input": messages[-1].content
+            }):
+                response_message += chunk
+                yield chunk
+            
+            st.session_state.messages.append({
+                "role": "assistant", 
+                "content": response_message
+            })
+            return  
+            
+        except HTTPStatusError as e:
+            if e.response.status_code == 429:
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (2 ** attempt)  
+                    st.warning(f"API перегружен. Повтор через {wait_time} секунд. (попытка {attempt + 1}/{max_retries})")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    st.error("API недоступен. Попробуйте позже.")
+                    yield "Извините, сервис временно перегружен. Попробуйте через минуту."
+            else:
+                st.error(f"Ошибка API: {e}")
+                yield f"Произошла ошибка: {e.response.status_code}"
+            break
+            
+        except Exception as e:
+            st.error(f"Неожиданная ошибка: {str(e)}")
+            yield "Произошла неожиданная ошибка. Попробуйте еще раз."
+            break
 
-    conversation_rag_chain = get_conversational_rag_chain(model)  
-    response_message = "*(RAG Response)*\n"
-    for chunk in conversation_rag_chain.pick("answer").stream({"messages": messages[:-1], "input": messages[-1].content}):
-        response_message += chunk
-        yield chunk
-
-    st.session_state.messages.append({"role": "assistant", "content": response_message})
 
 
 
