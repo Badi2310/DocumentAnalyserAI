@@ -48,12 +48,9 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 
-
 load_dotenv()
 
 llm_stream = init_llm()
-
-
 
 if prompt := st.chat_input("Ваше сообщение"):
     st.session_state.messages.append({"role":"user","content":prompt})
@@ -66,4 +63,3 @@ if prompt := st.chat_input("Ваше сообщение"):
         for chunk in generate_response(llm_stream, st.session_state.messages, st.session_state.rag_sources):
             full_response += str(chunk)
             placeholder.markdown(full_response, unsafe_allow_html=True)
-        st.session_state.messages.append({"role":"assistant","content":full_response})

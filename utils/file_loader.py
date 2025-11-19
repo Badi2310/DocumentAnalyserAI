@@ -21,11 +21,14 @@ except ImportError:
 
 
 def load_pdf_to_db(pdf_file):
+    """Загрузка PDF файла в векторную базу данных"""
     docs = []
     os.makedirs("docs", exist_ok=True)
 
-    if pdf_file.name not in [f.name for f in st.session_state.rag_sources]:
-        if len(st.session_state.rag_sources) < DB_DOCS_LIMIT:
+    unique_sources = list(set(st.session_state.rag_sources))
+
+    if pdf_file.name not in st.session_state.rag_sources:
+        if len(unique_sources) < DB_DOCS_LIMIT:
             file_path = os.path.join("docs", pdf_file.name)
             with open(file_path, "wb") as f:
                 f.write(pdf_file.read())
@@ -40,21 +43,25 @@ def load_pdf_to_db(pdf_file):
                         metadata={"source": pdf_file.name, "page": page_num + 1},
                     )
                     docs.append(doc)
-
+                
                 st.session_state.rag_sources.append(pdf_file.name)
-
+                
                 _split_and_load_docs(docs)
-
+                
                 st.toast(f"{pdf_file.name} успешно загружен")
 
             except Exception as e:
                 st.toast(f"Ошибка загрузки PDF {pdf_file.name}: {e}")
                 print(f"Ошибка загрузки PDF {pdf_file.name}: {e}")
         else:
-            st.error(f"Достигнут лимит документов ({DB_DOCS_LIMIT}).")
+            st.error(f"Достигнут лимит уникальных документов ({DB_DOCS_LIMIT}).")
+            print(f"❌ Лимит документов достигнут: {len(unique_sources)}/{DB_DOCS_LIMIT}")
+    else:
+        st.warning(f"Документ {pdf_file.name} уже загружен.")
+        print(f"Документ {pdf_file.name} уже в базе")
 
 
-# 
+
 def _split_and_load_docs(pages):
     '''Разделение текста на чанки (chunks)'''
     text_splitter = RecursiveCharacterTextSplitter(
@@ -82,7 +89,7 @@ def handle_uploaded_files(files, session_rag_sources):
 
 class PDFProcessor:
     def __init__(self, ocr_model=None, captioner_model=None, min_text_length=20):
-        from models import OCR, ImageCaptioner
+        from models.OCR import OCR, ImageCaptioner
 
         self.ocr = ocr_model or OCR()
         self.captioner = captioner_model or ImageCaptioner()

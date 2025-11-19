@@ -2,6 +2,7 @@ import os
 import dotenv
 import time
 import streamlit as st
+from utils.database import initialize_vector_db
 
 
 try:
@@ -136,8 +137,9 @@ def stream_llm_response(llm, messages):
 
 
 def _get_context_retriever_chain(vector_db, model):
+    """Создание retriever chain для поиска контекста"""
     if vector_db is None:
-        st.session_state.vector_db = utils.database.initialize_vector_db([])
+        st.session_state.vector_db = initialize_vector_db([])
         vector_db = st.session_state.vector_db
 
     retriever = vector_db.as_retriever(
@@ -148,10 +150,11 @@ def _get_context_retriever_chain(vector_db, model):
             "lambda_mult": 0.7  
         }
     )
+    
     prompt = ChatPromptTemplate.from_messages([
-        MessagesPlaceholder(variable_name="chat_history"),
         ("user", "{input}"),
-        ("user", "Given the above conversation, generate a search query to look up in order to get information relevant to the conversation, focusing on the most recent messages."),
+        ("user", """Generate a comprehensive search query to find ALL key themes and topics from the document. 
+        When asked about document contents, search for: main topics, key people, numbers, events, and overall structure."""),
     ])
 
     retriever_chain = create_history_aware_retriever(model, retriever, prompt)
@@ -199,8 +202,6 @@ def get_conversational_rag_chain(model):
 
 
 def stream_llm_rag_response(messages):
-    time.sleep(2)  
-
     model = init_llm(temperature=0.7, max_tokens=16248)
 
     conversation_rag_chain = get_conversational_rag_chain(model)  
