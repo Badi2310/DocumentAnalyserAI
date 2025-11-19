@@ -21,7 +21,8 @@
 ```cd DocumentAnalyserAI```
 
 3. Создайте файл `.env` в корне проекта и добавьте в него следующие переменные:
-```MISTRAL_API_KEY="ваш_ключ_от_Mistral"
+```
+MISTRAL_API_KEY="ваш_ключ_от_Mistral"
 WEAVIATE_API_KEY="ваш_ключ_от_Weaviate"
 WEAVIATE_CLUSTER="ваш_кластер_Weaviate"
 ```
