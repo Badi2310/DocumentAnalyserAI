@@ -283,7 +283,6 @@ def _split_and_load_docs(pages):
     
     print(f"Создано {len(docs)} чанков из {len(pages)} страниц")
 
-    # Загружаем ЧАНКИ, а не оригинальные страницы
     if "vector_db" not in st.session_state or st.session_state.vector_db is None:
         st.session_state.vector_db = initialize_vector_db(docs)
         print(f"Инициализирована новая база с {len(docs)} документами")

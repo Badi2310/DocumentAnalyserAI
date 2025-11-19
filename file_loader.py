@@ -6,6 +6,14 @@ from docx import Document
 from fpdf import FPDF
 
 
+import os
+import tempfile
+from pdf2image import convert_from_path
+from pypdf import PdfReader
+from docx import Document
+from fpdf import FPDF
+
+
 class PDFProcessor:
     def __init__(self, ocr_model=None, captioner_model=None, min_text_length=20):
         from models import OCR, ImageCaptioner
@@ -15,10 +23,82 @@ class PDFProcessor:
         self.temp_dir = tempfile.mkdtemp()
         self.min_text_length = min_text_length
 
+    def is_text_file(self, file_path):
+        """Check type file"""
+        text_extensions = {'.txt', '.md', '.csv', '.log', '.text'}
+        _, ext = os.path.splitext(file_path.lower())
+        return ext in text_extensions
+
+    def read_text_file(self, file_path):
+        """Read text with differenf encodings"""
+        try:
+            encodings = ['utf-8', 'utf-8-sig', 'cp1251', 'windows-1251', 'latin-1', 'iso-8859-1']
+            
+            for encoding in encodings:
+                try:
+                    with open(file_path, 'r', encoding=encoding) as f:
+                        text = f.read()
+                    print(f"TXT файл прочитан с кодировкой: {encoding}")
+                    return text
+                except (UnicodeDecodeError, LookupError):
+                    continue
+            
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                text = f.read()
+            print("TXT файл прочитан с игнорированием ошибок декодирования")
+            return text
+            
+        except Exception as e:
+            print(f"Ошибка чтения TXT файла: {e}")
+            return ""
+
+    def process_text_file(self, file_path):
+        """Обработка TXT файла напрямую (без конвертации в PDF)"""
+        text = self.read_text_file(file_path)
+        
+        if not text:
+            print("TXT файл пустой или не удалось прочитать")
+            return []
+        
+        chunk_size = 2000
+        pages = []
+        
+        if len(text) <= chunk_size:
+            pages.append(text)
+            print(f"  TXT файл обработан: 1 страница ({len(text)} символов)")
+        else:
+            lines = text.split('\n')
+            current_chunk = []
+            current_length = 0
+            
+            for line in lines:
+                line_length = len(line) + 1  
+                
+                if current_length + line_length > chunk_size and current_chunk:
+                    pages.append('\n'.join(current_chunk))
+                    current_chunk = [line]
+                    current_length = line_length
+                else:
+                    current_chunk.append(line)
+                    current_length += line_length
+            
+            if current_chunk:
+                pages.append('\n'.join(current_chunk))
+            
+            print(f"  TXT файл обработан: {len(pages)} страниц")
+        
+        return pages
+
     def convert_to_pdf(self, file_path):
+        """Конвертация файлов в PDF (если необходимо)"""
         ext = os.path.splitext(file_path)[1].lower()
+        
         if ext == ".pdf":
             return file_path
+        
+        elif ext in ['.txt', '.md', '.csv', '.log']:
+            return None
+        
         elif ext == ".docx":
             pdf_path = file_path.replace(".docx", ".pdf")
             doc = Document(file_path)
@@ -32,6 +112,7 @@ class PDFProcessor:
                 pdf.cell(0, 10, text=line, new_x="LMARGIN", new_y="NEXT")
             pdf.output(pdf_path)
             return pdf_path
+        
         else:
             raise ValueError(f"Unsupported file type: {ext}")
 
@@ -81,10 +162,18 @@ class PDFProcessor:
         )
 
     def process(self, file_path):
-        """ "
-        Full processing of file
         """
+        Full processing of file (PDF, DOCX, TXT)
+        """
+        if self.is_text_file(file_path):
+            print(f"Обнаружен текстовый файл: {os.path.basename(file_path)}")
+            return self.process_text_file(file_path)
+        
         pdf_path = self.convert_to_pdf(file_path)
+        
+        if pdf_path is None:
+            return self.process_text_file(file_path)
+        
         processed_pages = []
 
         try:
@@ -143,9 +232,11 @@ class PDFProcessor:
         except Exception as e:
             print(f"Error processing PDF: {e}")
             raise
+        
         return processed_pages
 
     def cleanup(self):
+        """Очистка временных файлов"""
         try:
             for file in os.listdir(self.temp_dir):
                 os.remove(os.path.join(self.temp_dir, file))
@@ -153,6 +244,7 @@ class PDFProcessor:
             print("Cleanup completed")
         except Exception as e:
             print(f"Cleanup error: {e}")
+
 
 
 # Example of usage
