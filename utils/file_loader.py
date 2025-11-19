@@ -57,7 +57,6 @@ def load_pdf_to_db(pdf_file):
             st.error(f"Достигнут лимит уникальных документов ({DB_DOCS_LIMIT}).")
             print(f"Лимит документов достигнут: {len(unique_sources)}/{DB_DOCS_LIMIT}")
     else:
-        st.warning(f"Документ {pdf_file.name} уже загружен.")
         print(f"Документ {pdf_file.name} уже в базе")
 
 

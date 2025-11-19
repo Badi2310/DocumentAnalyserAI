@@ -18,5 +18,8 @@ pip install python-docx --force-reinstall
 pip install fpdf --force-reinstall
 pip install opencv-python-headless --force-reinstall
 pip install pytesseract --force-reinstall
+pip install bert-score --force-reinstall
+pip install nltk --force-reinstall
+pip install scikit-learn --force-reinstall
 
 echo "Все пакеты установлены"

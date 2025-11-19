@@ -1,8 +1,7 @@
-import os
 import dotenv
-import time
 import streamlit as st
 from utils.database import initialize_vector_db
+from utils.metrics import RAGMetrics
 
 
 try:
@@ -202,12 +201,12 @@ def get_conversational_rag_chain(model):
 
 
 def stream_llm_rag_response(messages):
-    """RAG стриминг с обработкой ошибок"""
     import time
     from httpx import HTTPStatusError
-    
+    metrics_evaluator = RAGMetrics()
     max_retries = 20
-    retry_delay = 2  
+    retry_delay = 2
+    query = messages[-1].content 
     
     for attempt in range(max_retries):
         try:
@@ -215,18 +214,41 @@ def stream_llm_rag_response(messages):
             conversation_rag_chain = get_conversational_rag_chain(model)
             
             response_message = ""
+            retrieved_context = ""  
+            
             for chunk in conversation_rag_chain.pick("answer").stream({
-                "messages": messages[:-1], 
+                "messages": messages[:-1],
                 "input": messages[-1].content
             }):
                 response_message += chunk
                 yield chunk
             
+  
+            if hasattr(st.session_state, 'vector_db') and st.session_state.vector_db:
+                retriever = st.session_state.vector_db.as_retriever(search_kwargs={"k": 5})
+                docs = retriever.get_relevant_documents(query)
+                retrieved_context = "\n".join([doc.page_content for doc in docs])
+            
+            metrics = metrics_evaluator.evaluate_rag_response(
+                query=query,
+                response=response_message,
+                retrieved_context=retrieved_context
+            )
+            
+            metrics_evaluator.log_metrics(metrics)
+            
+            st.sidebar.markdown(f"""
+            **Метрики ответа:**
+            - Релевантность контекста: {metrics['context_relevance']:.3f}
+            - Верность ответа: {metrics['answer_faithfulness']:.3f}
+            - Релевантность ответа: {metrics['answer_relevance']:.3f}
+            """)
+            
             st.session_state.messages.append({
-                "role": "assistant", 
+                "role": "assistant",
                 "content": response_message
             })
-            return  
+            return
             
         except HTTPStatusError as e:
             if e.response.status_code == 429:
